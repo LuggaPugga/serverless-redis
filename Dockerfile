@@ -1,4 +1,4 @@
-FROM rust:1.83-slim-bookworm AS chef
+FROM rust:1.91-slim AS chef
 WORKDIR /app
 RUN cargo install cargo-chef
 
@@ -12,13 +12,10 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin serverless-redis
 
-FROM debian:bookworm-slim AS runtime
-WORKDIR /app
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=builder /app/target/release/serverless-redis /usr/local/bin/serverless-redis
-
 ENV PORT=3000
 EXPOSE 3000
+USER nonroot:nonroot
 
-CMD ["serverless-redis"]
-
+CMD ["/usr/local/bin/serverless-redis"]

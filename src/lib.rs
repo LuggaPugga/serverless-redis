@@ -26,22 +26,28 @@ impl<B> ValidateRequest<B> for BearerTokenValidator {
         &mut self,
         request: &mut Request<B>,
     ) -> Result<(), axum::response::Response<Self::ResponseBody>> {
-        match request.headers().get(axum::http::header::AUTHORIZATION) {
-            Some(header_value) => {
-                if let Ok(auth_str) = header_value.to_str() {
-                    if let Some(token) = auth_str.strip_prefix("Bearer ") {
-                        if token == self.token {
-                            return Ok(());
-                        }
-                    }
-                }
-                Err(StatusCode::UNAUTHORIZED.into_response())
-            }
-            None => Err(StatusCode::UNAUTHORIZED.into_response()),
+        let valid = request
+            .headers()
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok())
+            .and_then(|s| s.strip_prefix("Bearer "))
+            .map_or(false, |t| t == self.token)
+            || request.uri().query().map_or(false, |q| {
+                q.split('&').any(|p| {
+                    p.split_once('=').map_or(false, |(k, v)| {
+                        (k == "_token" || k == "qstash_token")
+                            && urlencoding::decode(v).map_or(false, |d| d == self.token)
+                    })
+                })
+            });
+
+        if valid {
+            Ok(())
+        } else {
+            Err(StatusCode::UNAUTHORIZED.into_response())
         }
     }
 }
-
 pub fn create_app(state: AppState, token: String) -> Router {
     Router::new()
         .route(

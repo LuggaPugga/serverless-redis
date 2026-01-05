@@ -31,12 +31,12 @@ impl<B> ValidateRequest<B> for BearerTokenValidator {
             .get(axum::http::header::AUTHORIZATION)
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
-            .map_or(false, |t| t == self.token)
-            || request.uri().query().map_or(false, |q| {
+            .is_some_and(|t| t == self.token)
+            || request.uri().query().is_some_and(|q| {
                 q.split('&').any(|p| {
-                    p.split_once('=').map_or(false, |(k, v)| {
+                    p.split_once('=').is_some_and(|(k, v)| {
                         (k == "_token" || k == "qstash_token")
-                            && urlencoding::decode(v).map_or(false, |d| d == self.token)
+                            && urlencoding::decode(v).is_ok_and(|d| d == self.token)
                     })
                 })
             });

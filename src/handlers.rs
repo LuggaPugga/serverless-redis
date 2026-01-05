@@ -69,7 +69,7 @@ pub async fn post_root(
         None => return error_resp("Invalid command array.", enc),
     };
 
-    if arr.first().map_or(false, |v| v.is_array()) {
+    if arr.first().is_some_and(|v| v.is_array()) {
         return post_pipeline(State(state), headers, Json(body)).await;
     }
 

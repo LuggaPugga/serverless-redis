@@ -37,18 +37,17 @@ fn sanitize_lua_code(code: &str) -> String {
     code.trim().to_string()
 }
 
-fn parse_cmd(arr: &[serde_json::Value], enc: bool) -> Result<Vec<String>, Response> {
+fn parse_cmd(arr: &[serde_json::Value], enc: bool) -> Result<Vec<String>, Box<Response>> {
     arr.iter()
         .enumerate()
         .map(|(idx, v)| {
             let s = json_to_string(v).ok_or_else(|| {
-                error_resp(
+                Box::new(error_resp(
                     "Invalid command array. Expected strings, numbers, or booleans.",
                     enc,
-                )
+                ))
             })?;
 
-            // Special handling for Lua code (typically the 4th argument in FUNCTION LOAD)
             if idx == 3 {
                 Ok(sanitize_lua_code(&s))
             } else {
@@ -75,7 +74,7 @@ pub async fn post_root(
 
     let cmd = match parse_cmd(arr, enc) {
         Ok(c) => c,
-        Err(e) => return e,
+        Err(e) => return *e,
     };
 
     let mut conn = state.conn.clone();
@@ -122,7 +121,7 @@ pub async fn post_pipeline(
         };
         match parse_cmd(arr, enc) {
             Ok(cmd) => cmds.push(cmd),
-            Err(e) => return e,
+            Err(e) => return *e,
         }
     }
 

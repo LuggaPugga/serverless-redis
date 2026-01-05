@@ -12,43 +12,37 @@ pub async fn post_root(
         .get("upstash-encoding")
         .and_then(|v| v.to_str().ok())
         == Some("base64");
-    let arr = body.as_array();
-    if arr.is_none() {
-        return write_resp(
-            EnvResp {
-                status: "malformed_data".into(),
-                result: None,
-                result_list: None,
-                error: Some(
-                    "Invalid command array. Expected a string array at root of the command and its arguments.".into(),
-                ),
-                message: None,
-            },
-            enc,
-        );
+
+    let arr = match body.as_array() {
+        Some(a) => a,
+        None => {
+            return write_resp(
+                EnvResp {
+                    status: "malformed_data".into(),
+                    result: None,
+                    result_list: None,
+                    error: Some("Invalid command array.".into()),
+                    message: None,
+                },
+                enc,
+            );
+        }
+    };
+
+    if let Some(first) = arr.first() {
+        if first.is_array() {
+            return post_pipeline(State(state), headers, Json(body)).await;
+        }
     }
 
-    let mut cmd = Vec::with_capacity(arr.unwrap().len());
-    for v in arr.unwrap() {
+    let mut cmd = Vec::with_capacity(arr.len());
+    for v in arr {
         let arg = match v {
             serde_json::Value::String(s) => s.clone(),
             serde_json::Value::Number(n) => n.to_string(),
             serde_json::Value::Bool(b) => b.to_string(),
-            serde_json::Value::Null => "".to_string(),
-            _ => {
-                return write_resp(
-                    EnvResp {
-                        status: "malformed_data".into(),
-                        result: None,
-                        result_list: None,
-                        error: Some(
-                            "Invalid command array. Expected strings, numbers, or booleans.".into(),
-                        ),
-                        message: None,
-                    },
-                    enc,
-                );
-            }
+            serde_json::Value::Null => "null".to_string(),
+            serde_json::Value::Array(_) | serde_json::Value::Object(_) => v.to_string(),
         };
         cmd.push(arg);
     }
@@ -87,61 +81,48 @@ pub async fn post_pipeline(
         .get("upstash-encoding")
         .and_then(|v| v.to_str().ok())
         == Some("base64");
-    let outer = body.as_array();
-    if outer.is_none() {
-        return write_resp(
-            EnvResp {
-                status: "malformed_data".into(),
-                result: None,
-                result_list: None,
-                error: Some(
-                    "Invalid command array. Expected an array of string arrays at root.".into(),
-                ),
-                message: None,
-            },
-            enc,
-        );
-    }
 
-    let mut cmds = Vec::with_capacity(outer.unwrap().len());
-    for item in outer.unwrap() {
-        let arr = item.as_array();
-        if arr.is_none() {
+    let outer = match body.as_array() {
+        Some(a) => a,
+        None => {
             return write_resp(
                 EnvResp {
                     status: "malformed_data".into(),
                     result: None,
                     result_list: None,
-                    error: Some(
-                        "Invalid command array. Expected an array of string arrays at root.".into(),
-                    ),
+                    error: Some("Expected an array of string arrays.".into()),
                     message: None,
                 },
                 enc,
             );
         }
-        let mut cmd = Vec::with_capacity(arr.unwrap().len());
-        for v in arr.unwrap() {
+    };
+
+    let mut cmds = Vec::with_capacity(outer.len());
+    for item in outer {
+        let arr = match item.as_array() {
+            Some(a) => a,
+            None => {
+                return write_resp(
+                    EnvResp {
+                        status: "malformed_data".into(),
+                        result: None,
+                        result_list: None,
+                        error: Some("Expected an array of string arrays.".into()),
+                        message: None,
+                    },
+                    enc,
+                );
+            }
+        };
+        let mut cmd = Vec::with_capacity(arr.len());
+        for v in arr {
             let arg = match v {
                 serde_json::Value::String(s) => s.clone(),
                 serde_json::Value::Number(n) => n.to_string(),
                 serde_json::Value::Bool(b) => b.to_string(),
-                serde_json::Value::Null => "".to_string(),
-                _ => {
-                    return write_resp(
-                        EnvResp {
-                            status: "malformed_data".into(),
-                            result: None,
-                            result_list: None,
-                            error: Some(
-                                "Invalid command array. Expected strings, numbers, or booleans."
-                                    .into(),
-                            ),
-                            message: None,
-                        },
-                        enc,
-                    );
-                }
+                serde_json::Value::Null => "null".to_string(),
+                serde_json::Value::Array(_) | serde_json::Value::Object(_) => v.to_string(),
             };
             cmd.push(arg);
         }

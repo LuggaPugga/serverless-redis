@@ -33,15 +33,27 @@ fn error_resp(msg: &str, enc: bool) -> Response {
     )
 }
 
+fn sanitize_lua_code(code: &str) -> String {
+    code.trim().to_string()
+}
+
 fn parse_cmd(arr: &[serde_json::Value], enc: bool) -> Result<Vec<String>, Response> {
     arr.iter()
-        .map(|v| {
-            json_to_string(v).ok_or_else(|| {
+        .enumerate()
+        .map(|(idx, v)| {
+            let s = json_to_string(v).ok_or_else(|| {
                 error_resp(
                     "Invalid command array. Expected strings, numbers, or booleans.",
                     enc,
                 )
-            })
+            })?;
+
+            // Special handling for Lua code (typically the 4th argument in FUNCTION LOAD)
+            if idx == 3 {
+                Ok(sanitize_lua_code(&s))
+            } else {
+                Ok(s)
+            }
         })
         .collect()
 }
